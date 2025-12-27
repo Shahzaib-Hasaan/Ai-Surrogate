@@ -16,12 +16,6 @@ pydantic[email]
 # AI Integration
 mistralai>=1.0.0  # Upgraded for Agno compatibility
 
-# Memory & Vector Database
-numpy<2.0.0  # Required for ChromaDB compatibility
-chromadb==0.5.23
-sentence-transformers==2.3.1
-textblob==0.17.1
-
 # AI Agents (Lightweight!)
 agno==2.3.21
 groq==0.4.1

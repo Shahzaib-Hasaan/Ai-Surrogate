@@ -7,6 +7,7 @@ Agno-based chat agent with Mistral integration.
 from agno.agent import Agent
 from typing import Dict
 import logging
+import os
 
 from app.config import settings
 
@@ -78,14 +79,18 @@ class ChatAgent:
         logger.info("Chat agent created with %s personality using Mistral via Agno", personality)
 
     def _create_agent(self) -> Agent:
-        """Create Agno agent with configured Mistral model."""
+        """Create Agno agent with persistent memory."""
         from agno.models.mistral import MistralChat
+        from agno.db.sqlite import SqliteDb
 
-        mistral_api_key = settings.MISTRAL_API_KEY
+        mistral_api_key = os.getenv("MISTRAL_API_KEY")
         if not mistral_api_key:
             raise ValueError("MISTRAL_API_KEY is not set; cannot initialize ChatAgent")
 
-        traits = PERSONALITY_TRAITS.get(self.personality, PERSONALITY_TRAITS["friendly"])
+        traits = PERSONALITY_TRAITS.get(
+            self.personality,
+            PERSONALITY_TRAITS["friendly"]
+        )
 
         system_prompt = (
             f"You are a {traits['tone']} AI assistant specializing in {self.expertise}. "
@@ -94,15 +99,17 @@ class ChatAgent:
             f"{self.goal}."
         )
 
+        # Create agent with persistent memory
         return Agent(
             name=f"{self.personality.capitalize()} Assistant",
             model=MistralChat(
-                id=self.model_id,
+                id="mistral-small-latest",
                 api_key=mistral_api_key,
             ),
             instructions=system_prompt,
             markdown=True,
-            add_history_to_context=True,
+            add_history_to_context=True,  # Built-in conversation memory
+            db=SqliteDb(db_file="./agno_memory.db"),  # Persistent storage
         )
 
     def get_system_prompt(self, memory_context: str = "") -> str:
