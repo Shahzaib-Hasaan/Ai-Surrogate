@@ -28,6 +28,7 @@ from app.services.chat_service import (
 )
 from app.services.ai_service import stream_ai_response
 from app.services.chat_service import create_conversation
+from app.services.emotion_service import extract_emotion_from_response
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -237,6 +238,7 @@ async def stream_message(
             full_response = ""
             chunk_count = 0
             
+            # Collect full response first (includes EMOTION tag)
             async for chunk in stream_ai_response(
                 user_message=message_data.content,
                 user_id=str(current_user.id),
@@ -244,7 +246,20 @@ async def stream_message(
                 db=db
             ):
                 full_response += chunk
+            
+            print(f"✅ AI response collected: {len(full_response)} chars")
+            
+            # Extract emotion and get clean response (without EMOTION tag)
+            clean_response, emotion_data = extract_emotion_from_response(
+                user_message=message_data.content,
+                ai_response=full_response
+            )
+            
+            # Now stream the CLEAN response to user (without EMOTION tag)
+            words = clean_response.split()
+            for i, word in enumerate(words):
                 chunk_count += 1
+                chunk = word + (" " if i < len(words) - 1 else "")
                 print(f"📦 Chunk {chunk_count}: '{chunk[:30]}...'")
                 
                 # Send chunk
@@ -254,20 +269,40 @@ async def stream_message(
                 # Small delay for smooth streaming
                 await asyncio.sleep(0.03)
             
-            print(f"✅ Streaming complete: {chunk_count} chunks, {len(full_response)} chars")
+            print(f"✅ Streaming complete: {chunk_count} chunks, {len(clean_response)} chars")
             
-            # Save AI response
+            # Save AI response (clean version without EMOTION tag)
             print("💾 Saving AI message...")
             ai_msg = DBMessage(
-                content=full_response,
+                content=clean_response,  # Save clean response
                 conversation_id=conversation_id,
-                user_id=current_user.id,  # ADD THIS LINE
+                user_id=current_user.id,
                 is_from_user=False
             )
             db.add(ai_msg)
             db.commit()
             db.refresh(ai_msg)
             print(f"✅ AI message saved: {ai_msg.id}")
+            
+            # Save emotion to database (already extracted above)
+            try:
+                from app.models import EmotionHistory
+                
+                emotion_record = EmotionHistory(
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    message_id=ai_msg.id,
+                    emotion=emotion_data["emotion"],
+                    confidence=emotion_data["confidence"],
+                    intensity=emotion_data["intensity"],
+                    user_message=message_data.content,
+                    ai_response=clean_response
+                )
+                db.add(emotion_record)
+                db.commit()
+                print(f"🧠 Emotion detected: {emotion_data['emotion']} ({emotion_data['confidence']:.0%} confidence)")
+            except Exception as emotion_error:
+                print(f"⚠️ Emotion tracking failed: {emotion_error}")
             
             # Memory automatically handled by Agno (agno_memory.db)
             

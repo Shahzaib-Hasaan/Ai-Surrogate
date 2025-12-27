@@ -174,59 +174,18 @@ async def stream_ai_response(
         # Build messages array
         messages = []
         
-        # Retrieve relevant memories
-        memory_context = ""
-        try:
-            logger.info(f"🧠 Searching memories for user {user_id}")
-            relevant_memories = memory_service.recall_relevant_memories(
-                user_id=user_id,
-                query=user_message,
-                n_results=3
-            )
-            
-            if relevant_memories:
-                logger.info(f"✅ Found {len(relevant_memories)} relevant memories")
-                memory_context = "\n\nRelevant context from past conversations:\n"
-                for i, memory in enumerate(relevant_memories, 1):
-                    memory_context += f"{i}. Previously, user said: \"{memory['user_message'][:100]}\"\n"
-                    memory_context += f"   You responded: \"{memory['ai_response'][:100]}\"\n"
-            else:
-                logger.info("ℹ️ No relevant memories found")
-        except Exception as e:
-            logger.warning(f"⚠️ Memory retrieval failed: {e}")
+        # Memory is handled by Agno's built-in system (agno_memory.db)
         
-        # Get agent with personality
+        # Get agent with personality (has emotion-aware system prompt built-in)
         agent = get_agent("default")  # Can be made configurable per user
-        
-        # Generate system prompt with personality and memory
-        system_content = agent.get_system_prompt(memory_context)
         logger.info(f"🎭 Using {agent.personality} personality")
         
-        # Create messages list (dicts for Mistral v1.x)
-        system_message = {"role": "system", "content": system_content}
-        messages.append(system_message)
+        # Use Agno agent to generate response
+        # Agent handles system prompt, memory, and emotion detection internally
+        response_text = agent.run(user_message)
         
-        # Add conversation context if available
-        if conversation_id and db:
-            context = build_conversation_context(conversation_id, db)
-            messages.extend(context)
-        
-        # Add current user message
-        messages.append({"role": "user", "content": user_message})
-        
-        # Call Mistral API with streaming
-        logger.info(f"Streaming from Mistral API with {len(messages)} messages")
-        
-        # Mistral v1.x API call
-        response = mistral_client.chat.complete(
-            model=settings.MISTRAL_CHAT_MODEL,
-            messages=messages,
-            temperature=settings.AI_TEMPERATURE,
-            max_tokens=settings.MAX_RESPONSE_TOKENS,
-        )
-        
-        # Extract response text
-        ai_response = response.choices[0].message.content
+        # Agno agent generates response (includes EMOTION tag)
+        ai_response = response_text
         
         # Simulate streaming by yielding chunks
         # Split into words for smooth streaming
