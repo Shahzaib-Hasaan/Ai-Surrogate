@@ -13,7 +13,6 @@ from mistralai import Mistral
 from app.config import settings
 from app.models import Message
 from sqlalchemy.orm import Session
-from app.services.memory_service import memory_service
 from app.services.agent_service import get_agent
 
 logger = logging.getLogger(__name__)
