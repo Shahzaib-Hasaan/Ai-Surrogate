@@ -28,6 +28,7 @@ from app.services.chat_service import (
 )
 from app.services.ai_service import stream_ai_response
 from app.services.chat_service import create_conversation
+from app.services.memory_service import memory_service
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -232,13 +233,14 @@ async def stream_message(
             yield f"data: {conv_data}\n\n"
             print(f"📤 Sent conversation_id: {conversation_id}")
             
-            # Stream AI response
+            # Stream AI response with memory
             print("🤖 Starting AI streaming...")
             full_response = ""
             chunk_count = 0
             
             async for chunk in stream_ai_response(
                 user_message=message_data.content,
+                user_id=str(current_user.id),
                 conversation_id=conversation_id,
                 db=db
             ):
@@ -267,6 +269,19 @@ async def stream_message(
             db.commit()
             db.refresh(ai_msg)
             print(f"✅ AI message saved: {ai_msg.id}")
+            
+            # Save to memory (ChromaDB)
+            try:
+                print("🧠 Saving to memory (ChromaDB)...")
+                memory_service.save_conversation(
+                    user_id=str(current_user.id),
+                    conversation_id=conversation_id,
+                    user_message=message_data.content,
+                    ai_response=full_response
+                )
+                print("✅ Memory saved to ChromaDB!")
+            except Exception as mem_error:
+                print(f"⚠️ Memory save failed: {mem_error}")
             
             # Send completion
             complete_data = json.dumps({'type': 'complete', 'message_id': str(ai_msg.id)})

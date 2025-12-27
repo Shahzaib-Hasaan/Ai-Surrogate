@@ -14,6 +14,8 @@ from mistralai.models.chat_completion import ChatMessage
 from app.config import settings
 from app.models import Message
 from sqlalchemy.orm import Session
+from app.services.memory_service import memory_service
+from app.services.agent_service import get_agent
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +78,10 @@ def build_conversation_context(
 
 async def generate_ai_response(
     user_message: str,
+    user_id: str,
     conversation_id: Optional[str] = None,
-    db: Optional[Session] = None
+    db: Optional[Session] = None,
+    use_memory: bool = True
 ) -> str:
     """
     Generate AI response using Mistral AI.
@@ -144,16 +148,18 @@ async def generate_ai_response(
 
 async def stream_ai_response(
     user_message: str,
+    user_id: str,
     conversation_id: Optional[str] = None,
     db: Optional[Session] = None
 ):
     """
-    Stream AI response using Mistral AI with real-time chunks.
+    Stream AI response using Mistral AI with real-time chunks and memory.
     
     Yields response chunks as they arrive for typewriter effect.
     
     Args:
         user_message: The user's message
+        user_id: User ID for memory retrieval
         conversation_id: Optional conversation ID for context
         db: Optional database session for context
         
@@ -170,14 +176,37 @@ async def stream_ai_response(
         # Build messages array
         messages = []
         
-        # Add system message for personality
+        # Retrieve relevant memories
+        memory_context = ""
+        try:
+            logger.info(f"🧠 Searching memories for user {user_id}")
+            relevant_memories = memory_service.recall_relevant_memories(
+                user_id=user_id,
+                query=user_message,
+                n_results=3
+            )
+            
+            if relevant_memories:
+                logger.info(f"✅ Found {len(relevant_memories)} relevant memories")
+                memory_context = "\n\nRelevant context from past conversations:\n"
+                for i, memory in enumerate(relevant_memories, 1):
+                    memory_context += f"{i}. Previously, user said: \"{memory['user_message'][:100]}\"\n"
+                    memory_context += f"   You responded: \"{memory['ai_response'][:100]}\"\n"
+            else:
+                logger.info("ℹ️ No relevant memories found")
+        except Exception as e:
+            logger.warning(f"⚠️ Memory retrieval failed: {e}")
+        
+        # Get agent with personality
+        agent = get_agent("default")  # Can be made configurable per user
+        
+        # Generate system prompt with personality and memory
+        system_content = agent.get_system_prompt(memory_context)
+        logger.info(f"🎭 Using {agent.personality} personality")
+        
         system_message = ChatMessage(
             role="system",
-            content=(
-                "You are a helpful, friendly AI assistant. "
-                "Provide clear, concise, and helpful responses. "
-                "Be conversational and engaging."
-            )
+            content=system_content
         )
         messages.append(system_message)
         
