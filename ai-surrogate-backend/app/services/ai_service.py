@@ -2,14 +2,13 @@
 AI Service for Mistral AI Integration
 
 Handles intelligent response generation using Mistral AI API.
-Compatible with mistralai==0.4.2
+Compatible with mistralai>=1.0.0
 """
 
 import os
 import logging
 from typing import List, Dict, Optional
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from mistralai import Mistral
 
 from app.config import settings
 from app.models import Message
@@ -28,7 +27,7 @@ def initialize_mistral_client():
     global mistral_client
     try:
         api_key = settings.MISTRAL_API_KEY
-        mistral_client = MistralClient(api_key=api_key)
+        mistral_client = Mistral(api_key=api_key)
         logger.info("Mistral AI client initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize Mistral client: {e}")
@@ -39,7 +38,7 @@ def build_conversation_context(
     conversation_id: str,
     db: Session,
     max_messages: int = 10
-) -> List[ChatMessage]:
+) -> List[Dict]:
     """
     Build conversation context from message history.
     
@@ -49,7 +48,7 @@ def build_conversation_context(
         max_messages: Maximum number of messages to include
         
     Returns:
-        List of ChatMessage objects in Mistral format
+        List of message dicts in Mistral format
     """
     try:
         # Get recent messages from conversation
@@ -64,11 +63,11 @@ def build_conversation_context(
         # Reverse to get chronological order
         messages = list(reversed(messages))
         
-        # Convert to Mistral ChatMessage format
+        # Convert to Mistral message format (dicts)
         context = []
         for msg in messages:
             role = "user" if msg.is_from_user else "assistant"
-            context.append(ChatMessage(role=role, content=msg.content))
+            context.append({"role": role, "content": msg.content})
         
         return context
     except Exception as e:
@@ -204,10 +203,8 @@ async def stream_ai_response(
         system_content = agent.get_system_prompt(memory_context)
         logger.info(f"🎭 Using {agent.personality} personality")
         
-        system_message = ChatMessage(
-            role="system",
-            content=system_content
-        )
+        # Create messages list (dicts for Mistral v1.x)
+        system_message = {"role": "system", "content": system_content}
         messages.append(system_message)
         
         # Add conversation context if available
@@ -216,14 +213,13 @@ async def stream_ai_response(
             messages.extend(context)
         
         # Add current user message
-        messages.append(ChatMessage(role="user", content=user_message))
+        messages.append({"role": "user", "content": user_message})
         
         # Call Mistral API with streaming
         logger.info(f"Streaming from Mistral API with {len(messages)} messages")
         
-        # Note: mistralai 0.4.2 doesn't have native streaming
-        # We'll simulate it by yielding the response in chunks
-        response = mistral_client.chat(
+        # Mistral v1.x API call
+        response = mistral_client.chat.complete(
             model=settings.MISTRAL_CHAT_MODEL,
             messages=messages,
             temperature=settings.AI_TEMPERATURE,
@@ -334,26 +330,26 @@ def count_tokens_estimate(text: str) -> int:
 
 
 def optimize_context(
-    messages: List[ChatMessage],
+    messages: List[Dict],
     max_tokens: int = 4000
-) -> List[ChatMessage]:
+) -> List[Dict]:
     """
     Optimize context to fit within token limit.
     
     Args:
-        messages: List of ChatMessage objects
+        messages: List of message dicts
         max_tokens: Maximum tokens allowed
         
     Returns:
         Optimized list of messages
     """
-    total_tokens = sum(count_tokens_estimate(msg.content) for msg in messages)
+    total_tokens = sum(count_tokens_estimate(msg["content"]) for msg in messages)
     
     if total_tokens <= max_tokens:
         return messages
     
     # Keep system message and recent messages
-    system_msg = messages[0] if messages and messages[0].role == "system" else None
+    system_msg = messages[0] if messages and messages[0]["role"] == "system" else None
     user_messages = messages[1:] if system_msg else messages
     
     # Keep most recent messages
@@ -361,11 +357,11 @@ def optimize_context(
     if system_msg:
         optimized.append(system_msg)
     
-    current_tokens = count_tokens_estimate(system_msg.content) if system_msg else 0
+    current_tokens = count_tokens_estimate(system_msg["content"]) if system_msg else 0
     
     # Add messages from most recent backwards
     for msg in reversed(user_messages):
-        msg_tokens = count_tokens_estimate(msg.content)
+        msg_tokens = count_tokens_estimate(msg["content"])
         if current_tokens + msg_tokens <= max_tokens:
             optimized.insert(1 if system_msg else 0, msg)
             current_tokens += msg_tokens

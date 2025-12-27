@@ -1,196 +1,159 @@
 """
 AI Agent with Personality
 
-CrewAI-based chat agent with Mistral AI integration.
+Agno-based chat agent with Mistral integration.
 """
 
-from crewai import Agent, Task, Crew
-from langchain_mistralai import ChatMistralAI
-from typing import Optional, Dict
+from agno.agent import Agent
+from typing import Dict
 import logging
-import os
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-# Initialize Mistral LLM for CrewAI
-def get_mistral_llm():
-    """Get Mistral LLM instance for CrewAI agents."""
-    api_key = os.getenv("MISTRAL_API_KEY")
-    if not api_key:
-        raise ValueError("MISTRAL_API_KEY not found in environment")
-    
-    return ChatMistralAI(
-        model="mistral-small-latest",
-        mistral_api_key=api_key,
-        temperature=0.7,
-        max_tokens=1000
-    )
+PERSONALITY_TRAITS = {
+    "friendly": {
+        "tone": "warm and approachable",
+        "style": "conversational with occasional emojis",
+        "greeting": "Hey there! 😊",
+    },
+    "professional": {
+        "tone": "formal and precise",
+        "style": "structured and detailed",
+        "greeting": "Hello, how may I assist you today?",
+    },
+    "casual": {
+        "tone": "relaxed and informal",
+        "style": "brief and to-the-point",
+        "greeting": "Hey! What's up?",
+    },
+    "enthusiastic": {
+        "tone": "energetic and positive",
+        "style": "encouraging with lots of emojis",
+        "greeting": "Hi! I'm so excited to help you! 🎉",
+    },
+    "empathetic": {
+        "tone": "gentle and understanding",
+        "style": "supportive and compassionate",
+        "greeting": "Hello, I'm here for you. 💙",
+    },
+    "calming": {
+        "tone": "soothing and reassuring",
+        "style": "patient and de-escalating",
+        "greeting": "Hi, let's take this one step at a time. 🌿",
+    },
+}
+
+PERSONALITY_PROFILES: Dict[str, Dict[str, str]] = {
+    "default": {"personality": "friendly", "expertise": "general assistant", "goal": "Help users with their questions and tasks"},
+    "professional": {"personality": "professional", "expertise": "business and productivity", "goal": "Deliver precise, actionable guidance"},
+    "casual": {"personality": "casual", "expertise": "general chat", "goal": "Keep conversations light and concise"},
+    "enthusiastic": {"personality": "enthusiastic", "expertise": "motivation and support", "goal": "Encourage and energize users"},
+    "technical": {"personality": "professional", "expertise": "programming and technology", "goal": "Provide accurate technical help"},
+    "empathetic": {"personality": "empathetic", "expertise": "emotional support", "goal": "Offer supportive, compassionate responses"},
+    "calming": {"personality": "calming", "expertise": "stress relief", "goal": "Help users stay calm and grounded"},
+}
+
+_agent_cache: Dict[str, "ChatAgent"] = {}
 
 
 class ChatAgent:
-    """
-    AI Chat Agent with personality and role-based behavior.
-    
-    Uses CrewAI framework with Mistral AI.
-    """
-    
+    """AI Chat Agent with personality and role-based behavior."""
+
     def __init__(
         self,
         personality: str = "friendly",
         expertise: str = "general assistant",
-        goal: str = "Help users with their questions and tasks"
+        goal: str = "Help users with their questions and tasks",
+        model_id: str = "",
     ):
-        """
-        Initialize chat agent with personality.
-        
-        Args:
-            personality: Personality type (friendly, professional, casual, enthusiastic)
-            expertise: Area of expertise
-            goal: Agent's primary goal
-        """
         self.personality = personality
         self.expertise = expertise
         self.goal = goal
-        
-        # Get Mistral LLM
-        self.llm = get_mistral_llm()
-        
-        # Define personality traits
-        self.personality_traits = {
-            "friendly": {
-                "tone": "warm and approachable",
-                "style": "conversational with occasional emojis",
-                "greeting": "Hey there! 😊",
-            },
-            "professional": {
-                "tone": "formal and precise",
-                "style": "structured and detailed",
-                "greeting": "Hello, how may I assist you today?",
-            },
-            "casual": {
-                "tone": "relaxed and informal",
-                "style": "brief and to-the-point",
-                "greeting": "Hey! What's up?",
-            },
-            "enthusiastic": {
-                "tone": "energetic and positive",
-                "style": "encouraging with lots of emojis",
-                "greeting": "Hi! I'm so excited to help you! 🎉",
-            }
-        }
-        
-        # Create CrewAI agent with Mistral
+        self.model_id = model_id or settings.MISTRAL_CHAT_MODEL
+
         self.agent = self._create_agent()
-        logger.info(f"✅ Chat agent created with {personality} personality using Mistral AI")
-    
+        logger.info("Chat agent created with %s personality using Mistral via Agno", personality)
+
     def _create_agent(self) -> Agent:
-        """Create CrewAI agent with personality."""
-        traits = self.personality_traits.get(
-            self.personality,
-            self.personality_traits["friendly"]
-        )
-        
-        backstory = (
+        """Create Agno agent with configured Mistral model."""
+        from agno.models.mistral import MistralChat
+
+        mistral_api_key = settings.MISTRAL_API_KEY
+        if not mistral_api_key:
+            raise ValueError("MISTRAL_API_KEY is not set; cannot initialize ChatAgent")
+
+        traits = PERSONALITY_TRAITS.get(self.personality, PERSONALITY_TRAITS["friendly"])
+
+        system_prompt = (
             f"You are a {traits['tone']} AI assistant specializing in {self.expertise}. "
             f"Your communication style is {traits['style']}. "
-            f"You always strive to be helpful, accurate, and engaging."
+            f"You always strive to be helpful, accurate, and engaging. "
+            f"{self.goal}."
         )
-        
+
         return Agent(
-            role=f"{self.personality.capitalize()} AI Assistant",
-            goal=self.goal,
-            backstory=backstory,
-            llm=self.llm,  # Use Mistral AI
-            verbose=False,
-            allow_delegation=False
+            name=f"{self.personality.capitalize()} Assistant",
+            model=MistralChat(
+                id=self.model_id,
+                api_key=mistral_api_key,
+            ),
+            instructions=system_prompt,
+            markdown=True,
+            add_history_to_context=True,
         )
-    
+
     def get_system_prompt(self, memory_context: str = "") -> str:
-        """
-        Generate system prompt with personality and memory.
-        
-        Args:
-            memory_context: Context from past conversations
-            
-        Returns:
-            System prompt string
-        """
-        traits = self.personality_traits.get(
-            self.personality,
-            self.personality_traits["friendly"]
-        )
-        
+        traits = PERSONALITY_TRAITS.get(self.personality, PERSONALITY_TRAITS["friendly"])
+
         prompt = (
             f"You are a {traits['tone']} AI assistant. "
             f"Your communication style is {traits['style']}. "
             f"You specialize in {self.expertise}. "
             f"{self.goal}."
         )
-        
+
         if memory_context:
             prompt += f"\n\n{memory_context}"
-        
+
         return prompt
-    
-    def create_task(self, user_message: str, context: str = "") -> Task:
-        """
-        Create a CrewAI task for the agent.
-        
-        Args:
-            user_message: User's message
-            context: Additional context
-            
-        Returns:
-            CrewAI Task
-        """
-        description = f"Respond to the user's message: {user_message}"
-        if context:
-            description += f"\n\nContext: {context}"
-        
-        return Task(
-            description=description,
-            agent=self.agent,
-            expected_output="A helpful, engaging response to the user's message"
-        )
-    
-    def execute_task(self, user_message: str, context: str = "") -> str:
-        """
-        Execute a task using the agent.
-        
-        Args:
-            user_message: User's message
-            context: Additional context
-            
-        Returns:
-            Agent's response
-        """
+
+    def run(self, message: str) -> str:
         try:
-            task = self.create_task(user_message, context)
-            crew = Crew(
-                agents=[self.agent],
-                tasks=[task],
-                verbose=False
-            )
-            
-            result = crew.kickoff()
-            return str(result)
-        
-        except Exception as e:
-            logger.error(f"Agent execution failed: {e}")
-            return f"I apologize, but I encountered an error. Could you please rephrase your question?"
-
-
-# Predefined agent personalities
-AGENT_PERSONALITIES = {
-    "default": ChatAgent(personality="friendly"),
-    "professional": ChatAgent(personality="professional", expertise="business and productivity"),
-    "casual": ChatAgent(personality="casual", expertise="general chat"),
-    "enthusiastic": ChatAgent(personality="enthusiastic", expertise="motivation and support"),
-    "technical": ChatAgent(personality="professional", expertise="programming and technology"),
-}
+            response = self.agent.run(message)
+            return response.content if hasattr(response, "content") else str(response)
+        except Exception as exc:  # keep the assistant running with a friendly fallback
+            logger.error("Agent execution failed: %s", exc)
+            return "I apologize, but I encountered an error. Could you please rephrase your question?"
 
 
 def get_agent(personality: str = "default") -> ChatAgent:
-    """Get a chat agent with specified personality."""
-    return AGENT_PERSONALITIES.get(personality, AGENT_PERSONALITIES["default"])
+    """Get or create a chat agent with the specified personality."""
+    if personality not in PERSONALITY_PROFILES:
+        personality = "default"
+
+    if personality not in _agent_cache:
+        config = PERSONALITY_PROFILES[personality]
+        _agent_cache[personality] = ChatAgent(**config)
+
+    return _agent_cache[personality]
+
+
+def get_emotion_agent(emotion: str) -> ChatAgent:
+    """Map detected emotion to an appropriate agent personality."""
+    emotion_to_personality = {
+        "happy": "enthusiastic",
+        "excited": "enthusiastic",
+        "sad": "empathetic",
+        "anxious": "calming",
+        "angry": "calming",
+        "frustrated": "calming",
+        "confused": "professional",
+        "grateful": "friendly",
+        "neutral": "default",
+    }
+
+    personality = emotion_to_personality.get(emotion, "default")
+    return get_agent(personality)
