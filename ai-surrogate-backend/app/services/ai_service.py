@@ -151,57 +151,43 @@ async def stream_ai_response(
     db: Optional[Session] = None
 ):
     """
-    Stream AI response using Mistral AI with real-time chunks and memory.
+    Stream AI response using hybrid orchestrator.
     
-    Yields response chunks as they arrive for typewriter effect.
+    Direct Mistral API with full PostgreSQL context.
     
     Args:
         user_message: The user's message
-        user_id: User ID for memory retrieval
+        user_id: User ID (for future use)
         conversation_id: Optional conversation ID for context
         db: Optional database session for context
         
     Yields:
         String chunks of the AI response
     """
-    global mistral_client
-    
-    # Initialize client if not already done
-    if mistral_client is None:
-        initialize_mistral_client()
-    
     try:
-        # Build messages array
-        messages = []
+        from app.services.orchestrator import get_orchestrator
         
-        # Memory is handled by Agno's built-in system (agno_memory.db)
+        logger.info(f"💬 Processing message with hybrid orchestrator")
         
-        # Get agent with personality (has emotion-aware system prompt built-in)
-        agent = get_agent("default")  # Can be made configurable per user
-        logger.info(f"🎭 Using {agent.personality} personality")
+        # Get orchestrator
+        orchestrator = get_orchestrator()
         
-        # Use Agno agent to generate response
-        # Agent handles system prompt, memory, and emotion detection internally
-        response_text = agent.run(user_message)
+        # Stream response with full context
+        async for chunk in orchestrator.stream_chat(
+            user_message=user_message,
+            conversation_id=conversation_id,
+            db=db
+        ):
+            yield chunk
         
-        # Agno agent generates response (includes EMOTION tag)
-        ai_response = response_text
-        
-        # Simulate streaming by yielding chunks
-        # Split into words for smooth streaming
-        words = ai_response.split()
-        for i, word in enumerate(words):
-            # Yield word with space (except last word)
-            if i < len(words) - 1:
-                yield word + " "
-            else:
-                yield word
-        
-        logger.info(f"Streaming complete: {len(ai_response)} chars")
+        logger.info(f"📤 Streaming complete")
         
     except Exception as e:
-        logger.error(f"Mistral streaming error: {e}")
-        # Fallback to echo in chunks
+        logger.error(f"Streaming error: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Fallback to echo
         echo_message = f"Echo: {user_message}"
         words = echo_message.split()
         for i, word in enumerate(words):
