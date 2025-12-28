@@ -15,6 +15,7 @@ from app.database import init_db
 from app.config import settings
 from app.routes import auth_router, chat_router
 from app.routes.preferences import router as preferences_router
+from app.routes.conversations import router as conversations_router
 
 
 @asynccontextmanager
@@ -88,6 +89,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(preferences_router)
+app.include_router(conversations_router)
 
 
 @app.get(

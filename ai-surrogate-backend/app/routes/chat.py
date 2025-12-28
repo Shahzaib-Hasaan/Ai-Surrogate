@@ -220,7 +220,7 @@ async def stream_message(
             user_msg = DBMessage(
                 content=message_data.content,
                 conversation_id=conversation_id,
-                user_id=current_user.id,  # ADD THIS LINE
+                user_id=current_user.id,
                 is_from_user=True
             )
             db.add(user_msg)
@@ -274,7 +274,7 @@ async def stream_message(
             # Save AI response (clean version without EMOTION tag)
             print("💾 Saving AI message...")
             ai_msg = DBMessage(
-                content=clean_response,  # Save clean response
+                content=clean_response,
                 conversation_id=conversation_id,
                 user_id=current_user.id,
                 is_from_user=False
@@ -284,7 +284,7 @@ async def stream_message(
             db.refresh(ai_msg)
             print(f"✅ AI message saved: {ai_msg.id}")
             
-            # Save emotion to database (already extracted above)
+            # Save emotion to database
             try:
                 from app.models import EmotionHistory
                 
@@ -303,8 +303,6 @@ async def stream_message(
                 print(f"🧠 Emotion detected: {emotion_data['emotion']} ({emotion_data['confidence']:.0%} confidence)")
             except Exception as emotion_error:
                 print(f"⚠️ Emotion tracking failed: {emotion_error}")
-            
-            # Memory automatically handled by Agno (agno_memory.db)
             
             # Send completion
             complete_data = json.dumps({'type': 'complete', 'message_id': str(ai_msg.id)})
