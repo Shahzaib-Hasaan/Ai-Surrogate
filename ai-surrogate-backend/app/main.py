@@ -16,6 +16,8 @@ from app.config import settings
 from app.routes import auth_router, chat_router
 from app.routes.preferences import router as preferences_router
 from app.routes.conversations import router as conversations_router
+from app.routes.mood import router as mood_router
+from app.routes.insights import router as insights_router
 
 
 @asynccontextmanager
@@ -47,6 +49,7 @@ app = FastAPI(
     * **Authentication**: User registration and login with JWT tokens
     * **Chat**: Real-time messaging with AI assistant
     * **Conversations**: Manage conversation history
+    * **Mood Tracking**: Track and analyze emotional well-being
     * **Multilingual**: Support for multiple languages (Phase 2)
     * **Voice**: Speech-to-text and text-to-speech (Phase 2)
     
@@ -90,6 +93,8 @@ app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(preferences_router)
 app.include_router(conversations_router)
+app.include_router(mood_router)
+app.include_router(insights_router)
 
 
 @app.get(

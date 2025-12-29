@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Surrogate API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 16px;
+            font-size: 1.5em;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .mood-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .mood-btn {
+            flex: 1;
+            min-width: 100px;
+            padding: 16px;
+            background: #f5f5f5;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .mood-btn:hover {
+            background: #e8e8e8;
+            transform: scale(1.05);
+        }
+        
+        .mood-btn.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .mood-emoji {
+            font-size: 32px;
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .response {
+            background: #f5f5f5;
+            border-left: 4px solid #667eea;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .success {
+            border-left-color: #4caf50;
+            background: #f1f8f4;
+        }
+        
+        .error {
+            border-left-color: #f44336;
+            background: #fef1f0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Surrogate API Tester</h1>
+        
+        <!-- Authentication -->
+        <div class="card">
+            <h2>🔐 Authentication</h2>
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" id="email" value="test@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="password" value="password123">
+            </div>
+            <button onclick="login()">Login</button>
+            <button onclick="register()" style="margin-left: 10px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">Register</button>
+            <div id="auth-response" class="response" style="display: none;"></div>
+        </div>
+        
+        <!-- Mood Tracking -->
+        <div class="card">
+            <h2>😊 Track Mood</h2>
+            <div class="mood-buttons">
+                <div class="mood-btn" onclick="selectMood('happy', this)">
+                    <span class="mood-emoji">😊</span>
+                    <div>Happy</div>
+                </div>
+                <div class="mood-btn" onclick="selectMood('neutral', this)">
+                    <span class="mood-emoji">😐</span>
+                    <div>Neutral</div>
+                </div>
+                <div class="mood-btn" onclick="selectMood('sad', this)">
+                    <span class="mood-emoji">😔</span>
+                    <div>Sad</div>
+                </div>
+                <div class="mood-btn" onclick="selectMood('frustrated', this)">
+                    <span class="mood-emoji">😤</span>
+                    <div>Frustrated</div>
+                </div>
+                <div class="mood-btn" onclick="selectMood('grateful', this)">
+                    <span class="mood-emoji">😌</span>
+                    <div>Grateful</div>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label>Intensity (1-5):</label>
+                <input type="number" id="intensity" value="3" min="1" max="5">
+            </div>
+            <div class="form-group">
+                <label>Note (optional):</label>
+                <textarea id="note" rows="3" placeholder="How are you feeling?"></textarea>
+            </div>
+            <button onclick="trackMood()">Track Mood</button>
+            <div id="mood-response" class="response" style="display: none;"></div>
+        </div>
+        
+        <!-- Insights -->
+        <div class="card">
+            <h2>📊 Insights Dashboard</h2>
+            <div class="form-group">
+                <label>Period:</label>
+                <select id="period">
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Time</option>
+                </select>
+            </div>
+            <button onclick="getInsights()">Get Insights</button>
+            <button onclick="getAIAnalysis()" style="margin-left: 10px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">Get AI Analysis</button>
+            <div id="insights-stats" class="stats-grid" style="display: none;"></div>
+            <div id="insights-response" class="response" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+        let token = localStorage.getItem('token') || '';
+        let selectedMood = '';
+
+        function selectMood(mood, element) {
+            selectedMood = mood;
+            document.querySelectorAll('.mood-btn').forEach(btn => btn.classList.remove('selected'));
+            element.classList.add('selected');
+        }
+
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, username: email.split('@')[0] })
+                });
+                
+                const data = await response.json();
+                showResponse('auth-response', data, response.ok);
+                
+                if (response.ok) {
+                    token = data.access_token;
+                    localStorage.setItem('token', token);
+                }
+            } catch (error) {
+                showResponse('auth-response', { error: error.message }, false);
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                showResponse('auth-response', data, response.ok);
+                
+                if (response.ok) {
+                    token = data.access_token;
+                    localStorage.setItem('token', token);
+                }
+            } catch (error) {
+                showResponse('auth-response', { error: error.message }, false);
+            }
+        }
+
+        async function trackMood() {
+            if (!selectedMood) {
+                alert('Please select a mood first!');
+                return;
+            }
+            
+            if (!token) {
+                alert('Please login first!');
+                return;
+            }
+            
+            const intensity = parseInt(document.getElementById('intensity').value);
+            const note = document.getElementById('note').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/mood`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ mood: selectedMood, intensity, note: note || undefined })
+                });
+                
+                const data = await response.json();
+                showResponse('mood-response', data, response.ok);
+                
+                if (response.ok) {
+                    document.getElementById('note').value = '';
+                }
+            } catch (error) {
+                showResponse('mood-response', { error: error.message }, false);
+            }
+        }
+
+        async function getInsights() {
+            if (!token) {
+                alert('Please login first!');
+                return;
+            }
+            
+            const period = document.getElementById('period').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/insights/summary?period=${period}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                showResponse('insights-response', data, response.ok);
+                
+                if (response.ok) {
+                    showStats(data);
+                }
+            } catch (error) {
+                showResponse('insights-response', { error: error.message }, false);
+            }
+        }
+
+        async function getAIAnalysis() {
+            if (!token) {
+                alert('Please login first!');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/insights/ai-analysis`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                showResponse('insights-response', data, response.ok);
+            } catch (error) {
+                showResponse('insights-response', { error: error.message }, false);
+            }
+        }
+
+        function showStats(data) {
+            const statsDiv = document.getElementById('insights-stats');
+            statsDiv.style.display = 'grid';
+            statsDiv.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${data.wellness_score}</div>
+                    <div class="stat-label">Wellness Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.mood_stats.total_checkins}</div>
+                    <div class="stat-label">Mood Check-ins</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.conversation_stats.total_conversations}</div>
+                    <div class="stat-label">Conversations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.conversation_stats.total_messages}</div>
+                    <div class="stat-label">Messages</div>
+                </div>
+            `;
+        }
+
+        function showResponse(elementId, data, success) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `response ${success ? 'success' : 'error'}`;
+            element.textContent = JSON.stringify(data, null, 2);
+        }
+
+        // Check if already logged in
+        if (token) {
+            showResponse('auth-response', { message: 'Already logged in (token found in localStorage)' }, true);
+        }
+    </script>
+</body>
+</html>
