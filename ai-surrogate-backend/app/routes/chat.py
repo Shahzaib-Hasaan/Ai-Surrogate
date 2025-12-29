@@ -29,6 +29,7 @@ from app.services.chat_service import (
 from app.services.ai_service import stream_ai_response
 from app.services.chat_service import create_conversation
 from app.services.emotion_service import extract_emotion_from_response
+from app.services.conversation_naming_service import trigger_conversation_naming
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -303,6 +304,26 @@ async def stream_message(
                 print(f"🧠 Emotion detected: {emotion_data['emotion']} ({emotion_data['confidence']:.0%} confidence)")
             except Exception as emotion_error:
                 print(f"⚠️ Emotion tracking failed: {emotion_error}")
+            
+            # Auto-generate conversation title if this is the first message
+            try:
+                # Count messages in this conversation (excluding current ones)
+                message_count = db.query(DBMessage).filter(
+                    DBMessage.conversation_id == conversation_id,
+                    DBMessage.is_from_user == True
+                ).count()
+                
+                # If this is the first user message, generate title
+                if message_count == 1:
+                    print(f"🏷️ First message detected, triggering conversation naming...")
+                    trigger_conversation_naming(
+                        conversation_id=conversation_id,
+                        user_message=message_data.content,
+                        ai_response=clean_response,
+                        db=db
+                    )
+            except Exception as naming_error:
+                print(f"⚠️ Conversation naming failed: {naming_error}")
             
             # Send completion
             complete_data = json.dumps({'type': 'complete', 'message_id': str(ai_msg.id)})
