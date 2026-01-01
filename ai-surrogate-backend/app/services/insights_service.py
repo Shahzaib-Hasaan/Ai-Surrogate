@@ -145,25 +145,26 @@ class InsightsService:
         for entry in mood_timeline:
             timeline_dict[entry['date']] = {
                 'date': entry['date'],
-                'user_mood': entry['average_intensity'],
+                'user_mood': float(entry['average_intensity']),
                 'detected_emotion': None,
-                'combined_score': entry['average_intensity']
+                'combined_score': float(entry['average_intensity'])
             }
         
         for date, avg_intensity, count in emotion_daily:
             date_str = date.isoformat()
+            avg_intensity_float = float(avg_intensity)
             if date_str in timeline_dict:
-                timeline_dict[date_str]['detected_emotion'] = avg_intensity * 5
+                timeline_dict[date_str]['detected_emotion'] = avg_intensity_float * 5
                 # Average both sources
                 timeline_dict[date_str]['combined_score'] = (
-                    timeline_dict[date_str]['user_mood'] + avg_intensity * 5
+                    timeline_dict[date_str]['user_mood'] + avg_intensity_float * 5
                 ) / 2
             else:
                 timeline_dict[date_str] = {
                     'date': date_str,
                     'user_mood': None,
-                    'detected_emotion': avg_intensity * 5,
-                    'combined_score': avg_intensity * 5
+                    'detected_emotion': avg_intensity_float * 5,
+                    'combined_score': avg_intensity_float * 5
                 }
         
         return sorted(timeline_dict.values(), key=lambda x: x['date'])

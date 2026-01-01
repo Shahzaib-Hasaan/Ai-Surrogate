@@ -127,7 +127,7 @@ class MoodService:
         
         return {
             'total_checkins': total_checkins,
-            'average_intensity': round(avg_intensity, 2),
+            'average_intensity': round(float(avg_intensity), 2),
             'distribution': distribution,
             'period_days': days
         }
@@ -167,7 +167,7 @@ class MoodService:
         for date, avg_intensity, count in daily_moods:
             timeline.append({
                 'date': date.isoformat(),
-                'average_intensity': round(avg_intensity, 2),
+                'average_intensity': round(float(avg_intensity), 2),
                 'check_ins': count
             })
         
