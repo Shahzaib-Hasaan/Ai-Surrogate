@@ -74,25 +74,25 @@ class InsightsService:
             EmotionHistory.detected_at >= cutoff_date
         ).all()
         
-        score = 50  # Base score
+        score = 50.0  # Base score (use float)
         
         # Factor 1: Mood check-in frequency (0-20 points)
         checkin_frequency = len(mood_entries) / days
-        score += min(checkin_frequency * 10, 20)
+        score += float(min(checkin_frequency * 10, 20))
         
         # Factor 2: Average mood intensity (0-30 points)
         if mood_entries:
             positive_moods = ['happy', 'grateful']
             positive_count = sum(1 for m in mood_entries if m.mood in positive_moods)
             positive_ratio = positive_count / len(mood_entries)
-            score += positive_ratio * 30
+            score += float(positive_ratio * 30)
         
         # Factor 3: Emotion positivity (0-20 points)
         if emotions:
             positive_emotions = ['happy', 'excited', 'grateful']
             positive_count = sum(1 for e in emotions if e.emotion in positive_emotions)
             positive_ratio = positive_count / len(emotions)
-            score += positive_ratio * 20
+            score += float(positive_ratio * 20)
         
         # Factor 4: Engagement (0-10 points)
         message_count = db.query(func.count(Message.id)).filter(
@@ -101,7 +101,7 @@ class InsightsService:
         ).scalar() or 0
         
         if message_count > 0:
-            score += min(message_count / 10, 10)
+            score += float(min(message_count / 10, 10))
         
         return min(int(score), 100)
     
