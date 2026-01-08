@@ -39,56 +39,77 @@ async def transcribe_audio(
     
     Returns transcribed text with confidence score.
     """
-    try:
-        # Read audio file
-        audio_data = await audio_file.read()
-        
-        if len(audio_data) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Audio file is empty"
-            )
-        
-        # Determine audio format from filename
-        filename = audio_file.filename or ""
-        audio_format = "webm_opus"  # Default
-        if filename.endswith(".mp3"):
-            audio_format = "mp3"
-        elif filename.endswith(".wav"):
-            audio_format = "wav"
-        elif filename.endswith(".flac"):
-            audio_format = "flac"
-        
-        # Get voice service
-        voice_service = get_voice_service()
-        
-        # Transcribe
-        result = voice_service.transcribe_audio(
-            audio_data=audio_data,
-            language_code=language_code,
-            audio_format=audio_format
-        )
-        
-        if not result.get("success"):
+        try:
+            # Read audio file
+            audio_data = await audio_file.read()
+            
+            if len(audio_data) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Audio file is empty"
+                )
+            
+            # Determine audio format from filename or content type
+            filename = audio_file.filename or ""
+            content_type = getattr(audio_file, 'content_type', '') or ''
+            
+            # Detect format
+            audio_format = "webm_opus"  # Default for Expo
+            if filename.endswith(".mp3") or "mp3" in content_type.lower():
+                audio_format = "mp3"
+            elif filename.endswith(".wav") or "wav" in content_type.lower():
+                audio_format = "wav"
+            elif filename.endswith(".flac") or "flac" in content_type.lower():
+                audio_format = "flac"
+            elif filename.endswith(".webm") or "webm" in content_type.lower():
+                audio_format = "webm_opus"
+            
+            logger.info(f"📁 Audio file: {filename}, format: {audio_format}, size: {len(audio_data)} bytes")
+            
+            # Get voice service
+            voice_service = get_voice_service()
+            
+            # Transcribe with timeout
+            import asyncio
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        voice_service.transcribe_audio,
+                        audio_data=audio_data,
+                        language_code=language_code,
+                        audio_format=audio_format
+                    ),
+                    timeout=30.0
+                )
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Transcription timeout. Please try again with a shorter audio."
+                )
+            
+            if not result.get("success"):
+                error_msg = result.get("error", "Transcription failed")
+                logger.error(f"❌ Transcription failed: {error_msg}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=error_msg
+                )
+            
+            return {
+                "success": True,
+                "text": result["text"],
+                "confidence": result["confidence"],
+                "language_code": result["language_code"]
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Transcription error: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Transcription failed")
+                detail=f"Error transcribing audio: {str(e)}"
             )
-        
-        return {
-            "success": True,
-            "text": result["text"],
-            "confidence": result["confidence"],
-            "language_code": result["language_code"]
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error transcribing audio: {str(e)}"
-        )
 
 
 @router.post(

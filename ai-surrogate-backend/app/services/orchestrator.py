@@ -246,17 +246,43 @@ EMOTION: neutral"
             logger.info(f"🤖 Calling Mistral with {len(messages)} messages (system + {len(messages)-2} history + current)")
             
             # Direct Mistral API call (version 1.0+)
-            response = self.mistral.chat.complete(
-                model="mistral-large-latest",
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            
-            ai_response = response.choices[0].message.content
-            logger.info(f"✅ Response generated: {len(ai_response)} chars")
-            
-            return ai_response
+            # Note: Mistral API calls are synchronous, so we run in thread pool
+            import asyncio
+            try:
+                # Run blocking API call in thread pool with timeout
+                loop = asyncio.get_event_loop()
+                
+                # Create the API call function
+                def call_mistral():
+                    return self.mistral.chat.complete(
+                        model="mistral-large-latest",
+                        messages=messages,
+                        temperature=0.7,
+                        max_tokens=1000
+                    )
+                
+                # Execute with timeout
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(None, call_mistral),
+                    timeout=25.0  # 25 seconds max
+                )
+                
+                if not response or not response.choices:
+                    logger.error("❌ Empty response from Mistral")
+                    return "I apologize, but I couldn't generate a response. Please try again."
+                
+                ai_response = response.choices[0].message.content
+                logger.info(f"✅ Response generated: {len(ai_response)} chars")
+                
+                return ai_response
+            except asyncio.TimeoutError:
+                logger.error("❌ Mistral API timeout (25s) - Render free tier may be slow")
+                return "I apologize, but the response is taking longer than expected. This might be due to server cold start. Please try again in a moment."
+            except Exception as api_error:
+                logger.error(f"❌ Mistral API error: {api_error}")
+                import traceback
+                traceback.print_exc()
+                return "I encountered an error processing your request. Please try again."
             
         except Exception as e:
             logger.error(f"Chat error: {e}")
@@ -280,20 +306,40 @@ EMOTION: neutral"
             String chunks
         """
         try:
-            # Get complete response
-            response = await self.chat(user_message, conversation_id, db)
+            # Get complete response with timeout (route handler sends "Thinking..." indicator)
+            import asyncio
+            try:
+                response = await asyncio.wait_for(
+                    self.chat(user_message, conversation_id, db),
+                    timeout=25.0  # 25 seconds max for API call
+                )
+            except asyncio.TimeoutError:
+                logger.error("❌ Chat timeout (25s)")
+                yield "I apologize, but the response is taking too long. Please try again."
+                return
+            except Exception as api_error:
+                logger.error(f"❌ Chat API error: {api_error}")
+                yield f"I encountered an error. Please try again."
+                return
             
-            # Stream word by word
-            words = response.split()
-            for i, word in enumerate(words):
-                if i < len(words) - 1:
-                    yield word + " "
-                else:
-                    yield word
+            # Stream word by word with small delay
+            if response:
+                words = response.split()
+                for i, word in enumerate(words):
+                    if i < len(words) - 1:
+                        yield word + " "
+                    else:
+                        yield word
+                    # Small delay for smooth streaming
+                    await asyncio.sleep(0.02)
+            else:
+                yield "I apologize, but I couldn't generate a response. Please try again."
                     
         except Exception as e:
             logger.error(f"Streaming error: {e}")
-            yield f"Echo: {user_message}"
+            import traceback
+            traceback.print_exc()
+            yield f"I encountered an error: {str(e)}"
 
 
 # Global orchestrator instance

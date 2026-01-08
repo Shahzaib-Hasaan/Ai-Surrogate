@@ -183,22 +183,62 @@ class VoiceService:
         }
         sr_lang = lang_map.get(language_code, "en-US")
         
-        # Convert audio format if needed
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_format.split('_')[0]}") as temp_file:
+        # Determine file extension and format
+        if "webm" in audio_format.lower() or "opus" in audio_format.lower():
+            file_ext = "webm"
+            pydub_format = "webm"
+        elif "mp3" in audio_format.lower():
+            file_ext = "mp3"
+            pydub_format = "mp3"
+        elif "wav" in audio_format.lower():
+            file_ext = "wav"
+            pydub_format = "wav"
+        else:
+            file_ext = "webm"  # Default
+            pydub_format = "webm"
+        
+        # Create temp file with proper extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as temp_file:
             temp_file.write(audio_data)
             temp_path = temp_file.name
         
+        wav_path = None
         try:
-            # Convert to WAV if needed (SpeechRecognition works best with WAV)
-            if audio_format != "wav":
-                audio = AudioSegment.from_file(temp_path, format=audio_format.split('_')[0])
-                wav_path = temp_path.replace(f".{audio_format.split('_')[0]}", ".wav")
-                audio.export(wav_path, format="wav")
-                os.remove(temp_path)
-                temp_path = wav_path
+            # Convert to WAV (SpeechRecognition requires WAV format)
+            # Try multiple methods for webm conversion
+            wav_path = temp_path.replace(f".{file_ext}", ".wav")
             
-            # Load audio file
+            try:
+                # Method 1: Try pydub with explicit format
+                if file_ext != "wav":
+                    logger.info(f"Converting {file_ext} to WAV...")
+                    audio = AudioSegment.from_file(temp_path, format=pydub_format)
+                    # Set sample rate and channels for SpeechRecognition
+                    audio = audio.set_frame_rate(16000).set_channels(1)
+                    audio.export(wav_path, format="wav")
+                    os.remove(temp_path)
+                    temp_path = wav_path
+            except Exception as e1:
+                logger.warning(f"Pydub conversion failed: {e1}")
+                # Method 2: Try with different format detection
+                try:
+                    audio = AudioSegment.from_file(temp_path)
+                    audio = audio.set_frame_rate(16000).set_channels(1)
+                    audio.export(wav_path, format="wav")
+                    os.remove(temp_path)
+                    temp_path = wav_path
+                except Exception as e2:
+                    logger.error(f"Audio conversion failed: {e2}")
+                    # If conversion fails, try to use original file if it's already WAV
+                    if file_ext == "wav":
+                        pass  # Already WAV, use as-is
+                    else:
+                        raise Exception(f"Could not convert {file_ext} to WAV: {e1}, {e2}")
+            
+            # Load audio file for recognition
             with sr.AudioFile(temp_path) as source:
+                # Adjust for ambient noise
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = self.recognizer.record(source)
             
             logger.info(f"🎤 Transcribing with free STT ({len(audio_data)} bytes, {sr_lang})")
@@ -217,10 +257,11 @@ class VoiceService:
             except sr.UnknownValueError:
                 return {
                     "success": False,
-                    "error": "Could not understand audio"
+                    "error": "Could not understand audio. Please speak more clearly."
                 }
             except sr.RequestError as e:
-                # Try offline recognition as fallback
+                logger.warning(f"Google Web Speech API failed: {e}")
+                # Try offline recognition as fallback (requires pocketsphinx)
                 try:
                     text = self.recognizer.recognize_sphinx(audio, language=sr_lang)
                     return {
@@ -230,13 +271,18 @@ class VoiceService:
                         "language_code": language_code,
                         "provider": "speech_recognition_sphinx"
                     }
-                except:
-                    raise Exception(f"Speech recognition failed: {e}")
+                except Exception as sphinx_error:
+                    logger.error(f"Sphinx recognition failed: {sphinx_error}")
+                    raise Exception(f"Speech recognition failed. Google API error: {e}")
         
         finally:
-            # Cleanup temp file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            # Cleanup temp files
+            for path in [temp_path, wav_path]:
+                if path and os.path.exists(path) and path != temp_path:
+                    try:
+                        os.remove(path)
+                    except:
+                        pass
     
     def _transcribe_google_cloud(
         self,

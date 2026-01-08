@@ -239,16 +239,44 @@ async def stream_message(
             full_response = ""
             chunk_count = 0
             
-            # Collect full response first (includes EMOTION tag)
-            async for chunk in stream_ai_response(
-                user_message=message_data.content,
-                user_id=str(current_user.id),
-                conversation_id=conversation_id,
-                db=db
-            ):
-                full_response += chunk
+            # Send initial "thinking" message to frontend immediately
+            # This prevents the frontend from thinking the connection is dead
+            thinking_data = json.dumps({'type': 'chunk', 'content': 'Thinking... '})
+            yield f"data: {thinking_data}\n\n"
+            print("📤 Sent 'Thinking...' indicator")
             
-            print(f"✅ AI response collected: {len(full_response)} chars")
+            # Stream response chunks as they arrive
+            try:
+                print("🔄 Starting to stream response chunks...")
+                buffer = ""  # Buffer for collecting full response
+                
+                async for chunk in stream_ai_response(
+                    user_message=message_data.content,
+                    user_id=str(current_user.id),
+                    conversation_id=conversation_id,
+                    db=db
+                ):
+                    buffer += chunk
+                    full_response += chunk
+                    
+                    # Send chunks immediately as they arrive (skip "Thinking" from orchestrator)
+                    if chunk.strip() and chunk.strip() != "Thinking":
+                        chunk_data = json.dumps({'type': 'chunk', 'content': chunk})
+                        yield f"data: {chunk_data}\n\n"
+                        chunk_count += 1
+                        if chunk_count <= 5 or chunk_count % 10 == 0:  # Log first 5 and every 10th chunk
+                            print(f"📦 Sent chunk {chunk_count}: '{chunk[:50]}...'")
+                
+                print(f"✅ AI response streamed: {len(full_response)} chars, {chunk_count} chunks")
+                
+            except Exception as stream_error:
+                print(f"❌ Stream error during collection: {stream_error}")
+                import traceback
+                traceback.print_exc()
+                # Send error to frontend
+                error_data = json.dumps({'type': 'error', 'message': str(stream_error)})
+                yield f"data: {error_data}\n\n"
+                return
             
             # Extract emotion and get clean response (without EMOTION tag)
             clean_response, emotion_data = extract_emotion_from_response(
@@ -256,21 +284,7 @@ async def stream_message(
                 ai_response=full_response
             )
             
-            # Now stream the CLEAN response to user (without EMOTION tag)
-            words = clean_response.split()
-            for i, word in enumerate(words):
-                chunk_count += 1
-                chunk = word + (" " if i < len(words) - 1 else "")
-                print(f"📦 Chunk {chunk_count}: '{chunk[:30]}...'")
-                
-                # Send chunk
-                chunk_data = json.dumps({'type': 'chunk', 'content': chunk})
-                yield f"data: {chunk_data}\n\n"
-                
-                # Small delay for smooth streaming
-                await asyncio.sleep(0.03)
-            
-            print(f"✅ Streaming complete: {chunk_count} chunks, {len(clean_response)} chars")
+            print(f"✅ Clean response: {len(clean_response)} chars")
             
             # Save AI response (clean version without EMOTION tag)
             print("💾 Saving AI message...")
