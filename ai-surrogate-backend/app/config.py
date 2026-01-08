@@ -48,6 +48,14 @@ class Settings:
     MAX_RESPONSE_TOKENS: int = int(os.getenv("MAX_RESPONSE_TOKENS", "1000"))
     MAX_CONTEXT_MESSAGES: int = int(os.getenv("MAX_CONTEXT_MESSAGES", "10"))
     
+    # Voice Processing (Google Cloud)
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", None)
+    GOOGLE_CREDENTIALS_JSON: Optional[str] = os.getenv("GOOGLE_CREDENTIALS_JSON", None)
+    
+    # Search APIs
+    BRAVE_API_KEY: str = os.getenv("BRAVE_API_KEY", "")
+    SERPAPI_KEY: str = os.getenv("SERPAPI_KEY", "")
+    
     @property
     def allowed_origins_list(self) -> list[str]:
         """Convert ALLOWED_ORIGINS string to list."""

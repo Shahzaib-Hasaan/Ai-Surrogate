@@ -18,6 +18,8 @@ from app.routes.preferences import router as preferences_router
 from app.routes.conversations import router as conversations_router
 from app.routes.mood import router as mood_router
 from app.routes.insights import router as insights_router
+from app.routes.voice import router as voice_router
+from app.routes.tools import router as tools_router
 
 
 @asynccontextmanager
@@ -50,8 +52,8 @@ app = FastAPI(
     * **Chat**: Real-time messaging with AI assistant
     * **Conversations**: Manage conversation history
     * **Mood Tracking**: Track and analyze emotional well-being
-    * **Multilingual**: Support for multiple languages (Phase 2)
-    * **Voice**: Speech-to-text and text-to-speech (Phase 2)
+    * **Multilingual**: Support for multiple languages (English, Urdu, Punjabi)
+    * **Voice**: Speech-to-text and text-to-speech with Google Cloud APIs
     
     ## Authentication
     
@@ -95,6 +97,8 @@ app.include_router(preferences_router)
 app.include_router(conversations_router)
 app.include_router(mood_router)
 app.include_router(insights_router)
+app.include_router(voice_router)
+app.include_router(tools_router)
 
 
 @app.get(

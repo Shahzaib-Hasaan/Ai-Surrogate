@@ -19,3 +19,15 @@ mistralai>=1.0.0  # Upgraded for Agno compatibility
 # AI Agents (Lightweight!)
 agno==2.3.21
 groq==0.4.1
+
+# Voice Processing - Free Alternatives (No Billing Required)
+# Primary: Free options that work without billing
+SpeechRecognition>=3.10.0
+gtts>=2.5.0
+edge-tts>=6.1.0
+pydub>=0.25.1
+
+# Optional: Google Cloud (requires billing - kept as fallback only)
+# google-cloud-speech>=2.21.0
+# google-cloud-texttospeech>=2.14.0
+# google-auth>=2.23.0

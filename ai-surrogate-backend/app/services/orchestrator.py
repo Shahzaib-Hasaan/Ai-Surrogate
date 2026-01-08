@@ -12,6 +12,8 @@ from mistralai import Mistral
 
 from app.config import settings
 from app.models import Message
+from app.services.intent_detector import get_intent_detector
+from app.services.search_service import get_search_service
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ class ChatOrchestrator:
         """Initialize orchestrator with Mistral client."""
         self.mistral = Mistral(api_key=settings.MISTRAL_API_KEY)
         self._finance_agent = None
+        self.intent_detector = get_intent_detector()
+        self.search_service = get_search_service()
         logger.info("✅ Chat Orchestrator initialized")
     
     def get_conversation_history(
@@ -81,7 +85,7 @@ class ChatOrchestrator:
         db: Optional[Session] = None
     ) -> str:
         """
-        Main chat method with full context.
+        Main chat method with full context and tool routing.
         
         Args:
             user_message: User's message
@@ -91,6 +95,63 @@ class ChatOrchestrator:
         Returns:
             AI response string
         """
+        try:
+            # Detect intent
+            intent = await self.intent_detector.detect_intent(user_message)
+            
+            # Route to appropriate tool if needed
+            if intent["tool"] == "search" and intent["confidence"] > 0.7:
+                return await self._handle_search_intent(user_message, conversation_id, db)
+            
+            # Continue with normal chat
+            return await self._handle_chat(user_message, conversation_id, db)
+            
+        except Exception as e:
+            logger.error(f"Chat error: {e}")
+            return f"I apologize, but I encountered an error. Please try again."
+    
+    async def _handle_search_intent(
+        self,
+        user_message: str,
+        conversation_id: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> str:
+        """Handle search intent by performing search and generating response."""
+        try:
+            # Perform search
+            search_result = await self.search_service.search(user_message, num_results=5)
+            
+            if not search_result.get("success"):
+                # Fallback to chat if search fails
+                return await self._handle_chat(user_message, conversation_id, db)
+            
+            # Build context with search results
+            search_summary = search_result.get("summary", "")
+            search_results = search_result.get("results", [])
+            
+            # Create enhanced prompt with search results
+            enhanced_message = f"""User asked: {user_message}
+
+I found the following information:
+
+{search_summary}
+
+Please provide a helpful response based on this information. If the information is relevant, use it. If not, provide a general helpful response."""
+            
+            # Get AI response with search context
+            return await self._handle_chat(enhanced_message, conversation_id, db)
+            
+        except Exception as e:
+            logger.error(f"Search intent handling error: {e}")
+            return await self._handle_chat(user_message, conversation_id, db)
+    
+    async def _handle_chat(
+        self,
+        user_message: str,
+        conversation_id: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> str:
+        """Handle normal chat without tools."""
         try:
             # Build messages array
             messages = []
@@ -112,14 +173,18 @@ Read the user's CURRENT message ONLY to determine language. Do NOT switch langua
    
 4. If the CURRENT message is in Hindi → Treat as Urdu, respond in proper Urdu (اردو)
 
-5. If the CURRENT message requests another language → Politely decline in BOTH languages:
-   "I only speak English and Urdu. میں صرف انگریزی اور اردو بولتا ہوں۔"
+5. If the CURRENT message is in Punjabi (ਪੰਜਾਬੀ) → Respond in Punjabi (ਪੰਜਾਬੀ)
+   Examples: "ਕਿਵੇਂ ਹੋ", "ਧੰਨਵਾਦ", "ਤੁਸੀਂ ਕਿਵੇਂ ਹੋ"
+
+6. If the CURRENT message requests another language → Politely decline in BOTH languages:
+   "I only speak English, Urdu, and Punjabi. میں صرف انگریزی، اردو اور پنجابی بولتا ہوں۔"
 
 IMPORTANT:
 - Do NOT mix languages in your response
-- Do NOT switch to Urdu unless user's CURRENT message is clearly Urdu/Roman Urdu
+- Do NOT switch languages unless user's CURRENT message is clearly in that language
 - English messages MUST get English responses
 - Be consistent with your language choice throughout the response
+- Support English, Urdu (اردو), and Punjabi (ਪੰਜਾਬੀ)
 
 FORMATTING RULES (CRITICAL):
 - Use proper line breaks and paragraphs for readability
